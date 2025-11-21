@@ -1,0 +1,440 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"type": "string",
+			"metadata": "Data Factory name",
+			"defaultValue": "adf-nycpayroll-mathu"
+		}
+	},
+	"variables": {
+		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('factoryName'), '/df_summary_payroll')]",
+			"type": "Microsoft.DataFactory/factories/dataflows",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"type": "MappingDataFlow",
+				"typeProperties": {
+					"sources": [
+						{
+							"dataset": {
+								"referenceName": "ds_sql_payroll_2020",
+								"type": "DatasetReference"
+							},
+							"name": "src2020"
+						},
+						{
+							"dataset": {
+								"referenceName": "ds_payroll_2021",
+								"type": "DatasetReference"
+							},
+							"name": "src2021"
+						}
+					],
+					"sinks": [
+						{
+							"dataset": {
+								"referenceName": "ds_sql_summary",
+								"type": "DatasetReference"
+							},
+							"name": "sinksqlsummary"
+						},
+						{
+							"dataset": {
+								"referenceName": "ds_adls_staging",
+								"type": "DatasetReference"
+							},
+							"name": "sinkadlsstaging"
+						}
+					],
+					"transformations": [
+						{
+							"name": "sel2021"
+						},
+						{
+							"name": "union"
+						},
+						{
+							"name": "fltfiscal"
+						},
+						{
+							"name": "drvtotalpaid"
+						},
+						{
+							"name": "aggsummary"
+						}
+					],
+					"scriptLines": [
+						"parameters{",
+						"     dataflowparamfiscalyear as integer (2020)",
+						"}",
+						"source(output(",
+						"          FiscalYear as integer,",
+						"          PayrollNumber as integer,",
+						"          AgencyID as string,",
+						"          AgencyName as string,",
+						"          EmployeeID as string,",
+						"          LastName as string,",
+						"          FirstName as string,",
+						"          AgencyStartDate as date,",
+						"          WorkLocationBorough as string,",
+						"          TitleCode as string,",
+						"          TitleDescription as string,",
+						"          LeaveStatusasofJune30 as string,",
+						"          BaseSalary as double,",
+						"          PayBasis as string,",
+						"          RegularHours as double,",
+						"          RegularGrossPaid as double,",
+						"          OTHours as double,",
+						"          TotalOTPaid as double,",
+						"          TotalOtherPay as double",
+						"     ),",
+						"     allowSchemaDrift: true,",
+						"     validateSchema: false,",
+						"     isolationLevel: 'READ_UNCOMMITTED',",
+						"     format: 'table') ~> src2020",
+						"source(output(",
+						"          FiscalYear as string,",
+						"          PayrollNumber as string,",
+						"          AgencyCode as string,",
+						"          AgencyName as string,",
+						"          EmployeeID as string,",
+						"          LastName as string,",
+						"          FirstName as string,",
+						"          AgencyStartDate as string,",
+						"          WorkLocationBorough as string,",
+						"          TitleCode as string,",
+						"          TitleDescription as string,",
+						"          LeaveStatusasofJune30 as string,",
+						"          BaseSalary as string,",
+						"          PayBasis as string,",
+						"          RegularHours as string,",
+						"          RegularGrossPaid as string,",
+						"          OTHours as string,",
+						"          TotalOTPaid as string,",
+						"          TotalOtherPay as string",
+						"     ),",
+						"     allowSchemaDrift: true,",
+						"     validateSchema: false,",
+						"     ignoreNoFilesFound: false) ~> src2021",
+						"src2021 select(mapColumn(",
+						"          FiscalYear,",
+						"          PayrollNumber,",
+						"          AgencyCode,",
+						"          AgencyName,",
+						"          EmployeeID,",
+						"          LastName,",
+						"          FirstName,",
+						"          AgencyStartDate,",
+						"          WorkLocationBorough,",
+						"          TitleCode,",
+						"          TitleDescription,",
+						"          LeaveStatusasofJune30,",
+						"          BaseSalary,",
+						"          PayBasis,",
+						"          RegularHours,",
+						"          RegularGrossPaid,",
+						"          OTHours,",
+						"          TotalOTPaid,",
+						"          TotalOtherPay",
+						"     ),",
+						"     skipDuplicateMapInputs: true,",
+						"     skipDuplicateMapOutputs: true) ~> sel2021",
+						"src2021, sel2021 union(byName: true)~> union",
+						"union filter(!isNull(FiscalYear) && toInteger(FiscalYear) >=$dataflowparamfiscalyear) ~> fltfiscal",
+						"fltfiscal derive(TotalPaid = toFloat(RegularGrossPaid) + toFloat(TotalOTPaid) + toFloat(TotalOtherPay)) ~> drvtotalpaid",
+						"drvtotalpaid aggregate(groupBy(FiscalYear,",
+						"          AgencyName),",
+						"     TotalPaid = sum(TotalPaid)) ~> aggsummary",
+						"aggsummary sink(allowSchemaDrift: true,",
+						"     validateSchema: false,",
+						"     input(",
+						"          FiscalYear as integer,",
+						"          AgencyName as string,",
+						"          TotalPaid as double",
+						"     ),",
+						"     deletable:false,",
+						"     insertable:true,",
+						"     updateable:false,",
+						"     upsertable:false,",
+						"     truncate:true,",
+						"     format: 'table',",
+						"     skipDuplicateMapInputs: true,",
+						"     skipDuplicateMapOutputs: true,",
+						"     errorHandlingOption: 'stopOnFirstError') ~> sinksqlsummary",
+						"aggsummary sink(allowSchemaDrift: true,",
+						"     validateSchema: false,",
+						"     umask: 0022,",
+						"     preCommands: [],",
+						"     postCommands: [],",
+						"     skipDuplicateMapInputs: true,",
+						"     skipDuplicateMapOutputs: true) ~> sinkadlsstaging"
+					]
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/pl_nycpayroll')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "dfagency",
+						"type": "ExecuteDataFlow",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataflow": {
+								"referenceName": "df_load_agency_master",
+								"type": "DataFlowReference",
+								"parameters": {},
+								"datasetParameters": {
+									"srcagency": {},
+									"sinkagency": {}
+								}
+							},
+							"staging": {},
+							"compute": {
+								"coreCount": 8,
+								"computeType": "General"
+							},
+							"traceLevel": "Fine"
+						}
+					},
+					{
+						"name": "dfemployee",
+						"type": "ExecuteDataFlow",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataflow": {
+								"referenceName": "df_loademployeemaster",
+								"type": "DataFlowReference",
+								"parameters": {},
+								"datasetParameters": {
+									"srcemp": {},
+									"sinkemp": {}
+								}
+							},
+							"staging": {},
+							"compute": {
+								"coreCount": 8,
+								"computeType": "General"
+							},
+							"traceLevel": "Fine"
+						}
+					},
+					{
+						"name": "dftitle",
+						"type": "ExecuteDataFlow",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataflow": {
+								"referenceName": "df_load_titlemaster",
+								"type": "DataFlowReference",
+								"parameters": {},
+								"datasetParameters": {
+									"srctitlemaster": {},
+									"sinttitlemaster": {}
+								}
+							},
+							"staging": {},
+							"compute": {
+								"coreCount": 8,
+								"computeType": "General"
+							},
+							"traceLevel": "Fine"
+						}
+					},
+					{
+						"name": "dfpayroll2020",
+						"type": "ExecuteDataFlow",
+						"dependsOn": [
+							{
+								"activity": "dfagency",
+								"dependencyConditions": [
+									"Completed"
+								]
+							},
+							{
+								"activity": "dfemployee",
+								"dependencyConditions": [
+									"Completed"
+								]
+							},
+							{
+								"activity": "dftitle",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataflow": {
+								"referenceName": "df_load_payroll_2020",
+								"type": "DataFlowReference",
+								"parameters": {},
+								"datasetParameters": {
+									"srcpayroll2020": {},
+									"sinkpayroll2020": {}
+								}
+							},
+							"staging": {},
+							"compute": {
+								"coreCount": 8,
+								"computeType": "General"
+							},
+							"traceLevel": "Fine"
+						}
+					},
+					{
+						"name": "dfpayroll2021",
+						"type": "ExecuteDataFlow",
+						"dependsOn": [
+							{
+								"activity": "dfagency",
+								"dependencyConditions": [
+									"Completed"
+								]
+							},
+							{
+								"activity": "dfemployee",
+								"dependencyConditions": [
+									"Completed"
+								]
+							},
+							{
+								"activity": "dftitle",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataflow": {
+								"referenceName": "df_load_payroll_2021",
+								"type": "DataFlowReference",
+								"parameters": {},
+								"datasetParameters": {
+									"srcpayroll2021": {},
+									"sinkpayroll2021": {}
+								}
+							},
+							"staging": {},
+							"compute": {
+								"coreCount": 8,
+								"computeType": "General"
+							},
+							"traceLevel": "Fine"
+						}
+					},
+					{
+						"name": "dfsummary",
+						"type": "ExecuteDataFlow",
+						"dependsOn": [
+							{
+								"activity": "dfpayroll2020",
+								"dependencyConditions": [
+									"Completed"
+								]
+							},
+							{
+								"activity": "dfpayroll2021",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataflow": {
+								"referenceName": "df_summary_payroll",
+								"type": "DataFlowReference",
+								"parameters": {
+									"dataflowparamfiscalyear": 2020
+								},
+								"datasetParameters": {
+									"src2020": {},
+									"src2021": {},
+									"sinksqlsummary": {},
+									"sinkadlsstaging": {}
+								}
+							},
+							"staging": {},
+							"compute": {
+								"coreCount": 8,
+								"computeType": "General"
+							},
+							"traceLevel": "Fine"
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"dataflowparamfiscalyear": {
+						"type": "int",
+						"defaultValue": 2020
+					}
+				},
+				"annotations": [],
+				"lastPublishTime": "2025-11-21T10:18:49Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/dataflows/df_summary_payroll')]"
+			]
+		}
+	]
+}

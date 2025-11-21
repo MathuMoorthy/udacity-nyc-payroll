@@ -1,0 +1,39 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"value": "adf-nycpayroll-mathu"
+		},
+		"ls_adls_payroll_accountKey": {
+			"value": ""
+		},
+		"ls_sql_payroll_password": {
+			"value": ""
+		},
+		"ls_synapse_analytics_password": {
+			"value": ""
+		},
+		"ls_adls_payroll_properties_typeProperties_url": {
+			"value": "https://adlsnycpayrollmathu.dfs.core.windows.net/"
+		},
+		"ls_sql_payroll_properties_typeProperties_server": {
+			"value": "nycdbserver.database.windows.net"
+		},
+		"ls_sql_payroll_properties_typeProperties_database": {
+			"value": "db_nycpayroll"
+		},
+		"ls_sql_payroll_properties_typeProperties_userName": {
+			"value": "udacityadmin"
+		},
+		"ls_synapse_analytics_properties_typeProperties_server": {
+			"value": "syn-nycpayroll-mathu-ondemand.sql.azuresynapse.net"
+		},
+		"ls_synapse_analytics_properties_typeProperties_database": {
+			"value": "udacity"
+		},
+		"ls_synapse_analytics_properties_typeProperties_userName": {
+			"value": "udacityadmin"
+		}
+	}
+}
